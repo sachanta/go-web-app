@@ -1,21 +1,31 @@
 package main
 
 import (
+	"context"
+	"crypto/tls"
 	"encoding/json"
+	"fmt"
+	"html/template"
 	"io/ioutil"
 	"log"
+	"net/http"
+
 	"os"
 	"path/filepath"
-	"fmt"
-	"net/http"
-	//"net/http/httputil"
-	"html/template"
-	"time"
-	"strings"
 	"strconv"
-	 "crypto/tls"
+	"strings"
+	"time"
+
+	"github.com/logicmonitor/lm-telemetry-sdk-go/config"
+	"github.com/logicmonitor/lm-telemetry-sdk-go/telemetry"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 )
 
+var (
+	tracer trace.Tracer
+)
 var serviceUri string = ""
 
 func getScriptHandler(w http.ResponseWriter, req *http.Request) {
@@ -38,7 +48,7 @@ func getScriptHandler(w http.ResponseWriter, req *http.Request) {
 
 				for l, m := range a {
 
-					switch mm := m.(type){
+					switch mm := m.(type) {
 
 					case string:
 						if l == "_id" {
@@ -50,13 +60,14 @@ func getScriptHandler(w http.ResponseWriter, req *http.Request) {
 					//fmt.Println(mm)
 					default:
 						//fmt.Println(k,"is of a type I don't know how to handle")
-						if mm !=  nil{}
+						if mm != nil {
+						}
 
 						if i == 1 {
 							if l == "script" {
 								//fmt.Println(l, m)
 								s := m.(map[string]interface{})
-								for k, v := range s{
+								for k, v := range s {
 									if k == "script" {
 										scr += v.(string)
 										i = 0
@@ -106,7 +117,7 @@ func downloadHandler(w http.ResponseWriter, req *http.Request) {
 
 				for l, m := range a {
 
-					switch mm := m.(type){
+					switch mm := m.(type) {
 
 					case string:
 						if l == "description" {
@@ -116,10 +127,11 @@ func downloadHandler(w http.ResponseWriter, req *http.Request) {
 					//fmt.Println(mm)
 					default:
 						//fmt.Println(k,"is of a type I don't know how to handle")
-						if mm !=  nil{}
+						if mm != nil {
+						}
 						if l == "script" && m != nil {
 							s := m.(map[string]interface{})
-							for k, v := range s{
+							for k, v := range s {
 								if k == "script" {
 									scr += v.(string)
 								}
@@ -127,13 +139,13 @@ func downloadHandler(w http.ResponseWriter, req *http.Request) {
 						}
 					}
 				}
-				ioutil.WriteFile(scriptsLocation + description + ".py", []byte(scr), 0775)
+				ioutil.WriteFile(scriptsLocation+description+".py", []byte(scr), 0775)
 				description = ""
 				scr = ""
 			}
 		//fmt.Println(scr)
 		default:
-		//fmt.Println(k, "is of a type I don't know how to handle")
+			//fmt.Println(k, "is of a type I don't know how to handle")
 		}
 	}
 	parsed_template, _ := template.ParseFiles("downloadConfirmation.html")
@@ -147,8 +159,8 @@ func downloadHandler(w http.ResponseWriter, req *http.Request) {
 func jobDetailHandler(w http.ResponseWriter, req *http.Request) {
 
 	scriptId := strings.Replace(req.URL.RequestURI(), "/jobDetail/", "", -1)
-	job := make(map[string]string,50)
-	myJob := make(map[string]string,50)
+	job := make(map[string]string, 50)
+	myJob := make(map[string]string, 50)
 	items := getItems()
 
 	m := items.(map[string]interface{})
@@ -164,7 +176,7 @@ func jobDetailHandler(w http.ResponseWriter, req *http.Request) {
 
 				for l, m := range a {
 
-					switch mm := m.(type){
+					switch mm := m.(type) {
 
 					case string:
 						job[l] = m.(string)
@@ -184,11 +196,12 @@ func jobDetailHandler(w http.ResponseWriter, req *http.Request) {
 						job[l] = temp
 					default:
 						//fmt.Println(k,"is of a type I don't know how to handle")
-						if mm != nil{}
+						if mm != nil {
+						}
 						if m != nil {
 							s := m.(map[string]interface{})
-							for k, v := range s{
-								switch oo := v.(type){
+							for k, v := range s {
+								switch oo := v.(type) {
 								case string:
 									if l != "script" && k != "script" {
 										job[l+"--"+k] = v.(string)
@@ -196,7 +209,8 @@ func jobDetailHandler(w http.ResponseWriter, req *http.Request) {
 								case float64:
 									job[l+"--"+k] = strconv.FormatFloat(v.(float64), 'f', 0, 64)
 								default:
-									if oo != nil{}
+									if oo != nil {
+									}
 								}
 							}
 						}
@@ -212,7 +226,7 @@ func jobDetailHandler(w http.ResponseWriter, req *http.Request) {
 			}
 		//fmt.Println(scr)
 		default:
-		//fmt.Println(k, "is of a type I don't know how to handle")
+			//fmt.Println(k, "is of a type I don't know how to handle")
 		}
 	}
 
@@ -223,7 +237,7 @@ func jobDetailHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func listHandler(w http.ResponseWriter, r *http.Request){
+func listHandler(w http.ResponseWriter, r *http.Request) {
 	items := getSchedules()
 
 	parsed_template, _ := template.ParseFiles("listofjobs.html")
@@ -234,8 +248,8 @@ func listHandler(w http.ResponseWriter, r *http.Request){
 
 }
 
-func welcomeHandler(w http.ResponseWriter, r *http.Request){
-
+func welcomeHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("reaches here")
 	parsed_template, _ := template.ParseFiles("home.html")
 	err := parsed_template.ExecuteTemplate(w, "home.html", nil)
 	if err != nil {
@@ -250,19 +264,50 @@ type DataModel struct {
 
 func gui_data() *DataModel {
 	gui_data := &DataModel{
-		Title:	"My Title",
+		Title: "My Title",
 	}
 
 	return gui_data
 }
 
-func main() {
+func initTracing() {
+	ctx := context.Background()
 
-	http.HandleFunc("/", welcomeHandler)
-	http.HandleFunc("/list", listHandler)
-	http.HandleFunc("/script/", getScriptHandler)
-	http.HandleFunc("/jobDetail/", jobDetailHandler)
-	http.HandleFunc("/downloadScripts", downloadHandler)
+	customAttributes := map[string]string{
+		"service.namespace": "sample-namespace",
+		"service.name":      "sample-service",
+	}
+
+	err := telemetry.SetupTelemetry(ctx,
+		config.WithAttributes(customAttributes),
+		config.WithAWSEC2Detector(),
+		config.WithHTTPTraceEndpoint("localhost:4318"),
+		config.WithSimlpeSpanProcessor(),
+		//config.WithDefaultInAppExporter(),
+	)
+	if err != nil {
+		log.Fatalf("error in setting up telemetry: %s", err.Error())
+	}
+	tracer = otel.Tracer("tracer-1")
+
+}
+
+func main() {
+	initTracing()
+	otelWelcomeHandler := otelhttp.NewHandler(http.HandlerFunc(welcomeHandler), "welcome")
+	http.Handle("/", otelWelcomeHandler)
+
+	otellistHandler := otelhttp.NewHandler(http.HandlerFunc(listHandler), "welcome")
+	http.Handle("/list", otellistHandler)
+
+	otelgetScriptHandler := otelhttp.NewHandler(http.HandlerFunc(getScriptHandler), "welcome")
+	http.Handle("/script/", otelgetScriptHandler)
+
+	oteljobDetailHandler := otelhttp.NewHandler(http.HandlerFunc(jobDetailHandler), "welcome")
+	http.Handle("/jobDetail/", oteljobDetailHandler)
+
+	oteldownloadHandler := otelhttp.NewHandler(http.HandlerFunc(downloadHandler), "welcome")
+	http.Handle("/downloadScripts", oteldownloadHandler)
 
 	server := getServerFromJSON()
 
@@ -271,31 +316,31 @@ func main() {
 
 	resp, err := http.Get("https://www.boredapi.com/api/activity")
 	if err != nil {
-    		log.Fatalln(err)
+		log.Fatalln(err)
 	}
 	var info map[string]interface{}
 	//b, err := httputil.DumpResponse(resp, true)
-	body , err := ioutil.ReadAll(resp.Body)
+	body, err := ioutil.ReadAll(resp.Body)
 	log.Printf("res.StatusCode: %d\n", resp.StatusCode)
 	log.Printf(string(body))
 	json.Unmarshal(body, &info)
-  
-    // if err != nil {
-  
-    //     // if error is not nil
-    //     // print error
-    //     fmt.Println(err)
-    // }
-  
-    // printing details of
-    // decoded data
-    //fmt.Printf(string(info["activity"]))
+
+	// if err != nil {
+
+	//     // if error is not nil
+	//     // print error
+	//     fmt.Println(err)
+	// }
+
+	// printing details of
+	// decoded data
+	//fmt.Printf(string(info["activity"]))
 
 	s := &http.Server{
-		Addr:		server.Port,
-		ReadTimeout:	10 * time.Second,
-		WriteTimeout:	10 * time.Second,
-		MaxHeaderBytes:	1 << 20,
+		Addr:           server.Port,
+		ReadTimeout:    10 * time.Second,
+		WriteTimeout:   10 * time.Second,
+		MaxHeaderBytes: 1 << 20,
 	}
 
 	log.Fatal(s.ListenAndServe())
@@ -312,24 +357,23 @@ func (e *APIError) Error() string {
 }
 
 type Items struct {
-	Items []Item	`json:"_items"`
+	Items []Item `json:"_items"`
 }
 
 type scriptItem struct {
-	contentType string `json:"contentType"`
+	contentType    string `json:"contentType"`
 	seleniumScript string `json:"script"`
 }
 
 type Item struct {
-	Id string `json:"_id"`
-	UserEnabled bool `json:"userEnabled"`
-	SystemEnabled bool `json:"systemEnabled"`
-	TimeoutSeconds int `json:"timeoutSeconds"`
-	Name string `json:"description"`
+	Id             string `json:"_id"`
+	UserEnabled    bool   `json:"userEnabled"`
+	SystemEnabled  bool   `json:"systemEnabled"`
+	TimeoutSeconds int    `json:"timeoutSeconds"`
+	Name           string `json:"description"`
 
 	scriptitem scriptItem `json:"script"`
 }
-
 
 func getSchedules() Items {
 	eum := getEumFromJSON()
@@ -367,7 +411,7 @@ func getSchedules() Items {
 
 }
 
-func getItems() interface{}{
+func getItems() interface{} {
 
 	var items interface{}
 	eum := getEumFromJSON()
@@ -385,9 +429,9 @@ func getItems() interface{}{
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		err := &APIError {
-			Code:	resp.StatusCode,
-			Message:	fmt.Sprintf("Status Code Error: %d\nRequest: %v", resp.StatusCode, req),
+		err := &APIError{
+			Code:    resp.StatusCode,
+			Message: fmt.Sprintf("Status Code Error: %d\nRequest: %v", resp.StatusCode, req),
 		}
 		log.Printf(err.Message)
 	}
@@ -412,9 +456,9 @@ func getItems() interface{}{
 
 // HTTP Server information
 type ServerConfig struct {
-	Port		string `json:"port"`
-	DownloadLoc     string `json:"scriptsDownloadLocation"`
-	ServiceUri 	string `json:"url"`
+	Port        string `json:"port"`
+	DownloadLoc string `json:"scriptsDownloadLocation"`
+	ServiceUri  string `json:"url"`
 }
 
 // create Server object from the serverconf.json file
@@ -435,10 +479,10 @@ func getServerFromJSON() ServerConfig {
 
 // EumConfig is the Eum account where we want to send the data to
 type EumConfig struct {
-	Username              string `json:"username"`
-	Password              string `json:"password"`
-	Url                   string `json:"url"`
-	AuthorizationHeader   string `json:"authorizationHeader"`
+	Username            string `json:"username"`
+	Password            string `json:"password"`
+	Url                 string `json:"url"`
+	AuthorizationHeader string `json:"authorizationHeader"`
 }
 
 //var client = appdrest.NewClient("http", "demo2.appdynamics.com", 80, "demouser", "Ghed7ped0geN", "customer1")
